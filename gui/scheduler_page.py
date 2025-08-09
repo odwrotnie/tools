@@ -8,6 +8,7 @@ import streamlit as st
 from lib.schedule import optimize_schedule
 import pandas as pd
 import altair as alt
+import io
 
 
 initial = {
@@ -304,24 +305,60 @@ def render_scheduler_tab() -> None:
                     )
                 )
 
-                # Overlay day number + person initials
-                initials = (
-                    df_cal.assign(init=df_cal["osoba"].map(lambda s: s[0].upper() if isinstance(s, str) and s not in {"", "—"} else ""))
-                )
+                # Overlay person name in the cell
                 text = (
-                    alt.Chart(initials)
-                    .mark_text(baseline="middle", fontSize=11)
+                    alt.Chart(df_cal)
+                    .mark_text(baseline="middle", fontSize=11, color="black")
                     .encode(
                         x="weekday:O",
                         y="week:O",
-                        text=alt.Text("label:N"),
-                    )
-                    .transform_calculate(
-                        label='join([toString(datum.day_num), datum.init ? ": " + datum.init : ""])'
+                        text=alt.Text("osoba:N"),
                     )
                 )
 
                 st.altair_chart(base + text, use_container_width=True)
+                
+                # Export to Excel
+                try:
+                    sched_rows = []
+                    for d, p in sorted(assignments.items()):
+                        try:
+                            day_dt = date.fromisoformat(d)
+                            weekday_name = _weekday_pl_name(day_dt)
+                        except Exception:
+                            weekday_name = ""
+                        sched_rows.append({"data": d, "dzien_tyg": weekday_name, "osoba": p})
+                    sched_df = pd.DataFrame(sched_rows)
+
+                    output = io.BytesIO()
+                    with pd.ExcelWriter(output, engine="openpyxl") as writer:
+                        sched_df.to_excel(writer, index=False, sheet_name="Harmonogram")
+                        # Optional summary sheet
+                        sum_df = (
+                            sched_df.groupby("osoba").size().reset_index(name="dni").sort_values(["dni","osoba"], ascending=[False, True])
+                        )
+                        sum_df.to_excel(writer, index=False, sheet_name="Podsumowanie")
+                    output.seek(0)
+
+                    st.download_button(
+                        label="Pobierz harmonogram (Excel)",
+                        data=output,
+                        file_name=f"harmonogram_{year:04d}_{month:02d}.xlsx",
+                        mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                    )
+                except Exception as export_exc:
+                    st.warning(f"Eksport do Excela nie jest dostępny: {export_exc}. Oferuję CSV.")
+                    # Fallback CSV
+                    try:
+                        csv_bytes = sched_df.to_csv(index=False).encode("utf-8")
+                        st.download_button(
+                            label="Pobierz harmonogram (CSV)",
+                            data=csv_bytes,
+                            file_name=f"harmonogram_{year:04d}_{month:02d}.csv",
+                            mime="text/csv",
+                        )
+                    except Exception:
+                        pass
             except Exception as cal_exc:
                 st.warning(f"Nie udało się narysować kalendarza: {cal_exc}")
         except Exception as exc:

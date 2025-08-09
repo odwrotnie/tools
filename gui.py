@@ -12,16 +12,16 @@ def main() -> None:
     st.title("Rzeczy")
     st.caption("Różne")
 
-    tabs = st.tabs(["Telefon", "Email", "Scheduler"])
+    tabs = st.tabs(["Scheduler", "Telefon", "Email"])
 
     with tabs[0]:
-        render_phone_tab()
+        render_scheduler_tab()
 
     with tabs[1]:
-        render_email_tab()
+        render_phone_tab()
 
     with tabs[2]:
-        render_scheduler_tab()
+        render_email_tab()
 
 
 if __name__ == "__main__":

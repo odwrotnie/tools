@@ -1,6 +1,8 @@
 from __future__ import annotations
 
 from typing import Dict, List
+import calendar
+from datetime import date
 
 import streamlit as st
 from lib.schedule import optimize_schedule
@@ -33,19 +35,94 @@ preferences = {
     "aga": initial.copy(),
 }
 
+DEFAULT_PEOPLE: List[str] = ["pawel", "michal", "kasia", "aga"]
 
-def _ensure_state_initialized() -> None:
-    if "scheduler_preferences" not in st.session_state:
+
+def _generate_days_for_month(year: int, month: int) -> List[str]:
+    num_days = calendar.monthrange(year, month)[1]
+    return [f"{year:04d}-{month:02d}-{d:02d}" for d in range(1, num_days + 1)]
+
+
+def _ensure_people_initialized() -> None:
+    if "scheduler_people" not in st.session_state:
+        st.session_state["scheduler_people"] = list(preferences.keys()) or DEFAULT_PEOPLE
+
+
+def _ensure_state_for_month(
+    year: int, month: int, default_value: int = 1, force_rebuild: bool = False
+) -> None:
+    people: List[str] = st.session_state.get("scheduler_people", DEFAULT_PEOPLE)
+    month_key = f"{year:04d}-{month:02d}"
+    if (
+        force_rebuild
+        or "scheduler_preferences" not in st.session_state
+        or st.session_state.get("scheduler_month_key") != month_key
+    ):
+        days_list = _generate_days_for_month(year, month)
         st.session_state["scheduler_preferences"] = {
-            person: {day: int(val) for day, val in days.items()}
-            for person, days in preferences.items()
+            person: {day: int(default_value) for day in days_list}
+            for person in people
         }
+        st.session_state["scheduler_month_key"] = month_key
+    else:
+        # If people list changed, sync preferences without losing current values
+        days_list = _generate_days_for_month(year, month)
+        current = st.session_state.get("scheduler_preferences", {})
+        # Remove missing people
+        for person in list(current.keys()):
+            if person not in people:
+                del current[person]
+        # Add new people with defaults
+        for person in people:
+            if person not in current:
+                current[person] = {day: int(default_value) for day in days_list}
+        # Ensure all persons have all days (keep existing values where present)
+        for person in people:
+            person_days = current.get(person, {})
+            for day in days_list:
+                if day not in person_days:
+                    person_days[day] = int(default_value)
+            # Optionally drop extra days not in current month
+            for day in list(person_days.keys()):
+                if day not in days_list:
+                    del person_days[day]
+        st.session_state["scheduler_preferences"] = current
 
 
 def render_scheduler_tab() -> None:
     st.header("Scheduler")
 
-    _ensure_state_initialized()
+    today = date.today()
+    col_year, col_month = st.columns([2, 1])
+    with col_year:
+        selected_year = st.number_input("Rok", value=int(today.year), min_value=2000, max_value=2100, step=1)
+    with col_month:
+        selected_month = st.selectbox("Miesiąc", options=list(range(1, 13)), index=int(today.month) - 1, format_func=lambda m: f"{m:02d}")
+
+    # People editor
+    _ensure_people_initialized()
+    current_people: List[str] = st.session_state.get("scheduler_people", DEFAULT_PEOPLE)
+    people_text_default = "\n".join(current_people)
+    people_text = st.text_area("Osoby (po jednej na linię)", value=people_text_default, height=100, key="scheduler_people_text")
+    force_rebuild = False
+    if st.button("Zapisz osoby"):
+        new_people: List[str] = []
+        seen = set()
+        for line in people_text.splitlines():
+            name = line.strip()
+            if not name:
+                continue
+            if name in seen:
+                continue
+            seen.add(name)
+            new_people.append(name)
+        if not new_people:
+            st.error("Lista osób nie może być pusta")
+        else:
+            st.session_state["scheduler_people"] = new_people
+            force_rebuild = True
+
+    _ensure_state_for_month(int(selected_year), int(selected_month), force_rebuild=force_rebuild)
     state_prefs: Dict[str, Dict[str, int]] = st.session_state["scheduler_preferences"]
 
     if not state_prefs:

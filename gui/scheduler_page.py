@@ -3,26 +3,27 @@ from __future__ import annotations
 from typing import Dict, List
 
 import streamlit as st
+from lib.schedule import optimize_schedule
 
 
 initial = {
-        "2025-08-01": 0,
-        "2025-08-02": 0,
-        "2025-08-03": 0,
-        "2025-08-04": 0,
-        "2025-08-05": 0,
-        "2025-08-06": 0,
-        "2025-08-07": 0,
-        "2025-08-08": 0,
-        "2025-08-09": 0,
-        "2025-08-10": 0,
-        "2025-08-11": 0,
-        "2025-08-12": 0,
-        "2025-08-13": 0,
-        "2025-08-14": 0,
-        "2025-08-15": 0,
-        "2025-08-16": 0,
-        "2025-08-17": 0,
+        "2025-08-01": 1,
+        "2025-08-02": 1,
+        "2025-08-03": 1,
+        "2025-08-04": 1,
+        "2025-08-05": 1,
+        "2025-08-06": 1,
+        "2025-08-07": 1,
+        "2025-08-08": 1,
+        "2025-08-09": 1,
+        "2025-08-10": 1,
+        "2025-08-11": 1,
+        "2025-08-12": 1,
+        "2025-08-13": 1,
+        "2025-08-14": 1,
+        "2025-08-15": 1,
+        "2025-08-16": 1,
+        "2025-08-17": 1,
     }
 
 preferences = {
@@ -75,4 +76,16 @@ def render_scheduler_tab() -> None:
 
         if idx < len(state_prefs) - 1:
             st.divider()
+
+    st.markdown("")
+    if st.button("Optymalizuj harmonogram", type="primary"):
+        try:
+            with st.spinner("Optymalizuję z użyciem OR-Tools…"):
+                assignments, total = optimize_schedule(state_prefs)
+            st.success(f"Gotowe. Łączny wynik preferencji: {total}")
+            # Show results as a simple table day -> person
+            rows = [{"dzień": d, "osoba": p} for d, p in sorted(assignments.items())]
+            st.table(rows)
+        except Exception as exc:
+            st.error(f"Błąd optymalizacji: {exc}")
 

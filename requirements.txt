@@ -3,4 +3,5 @@ httpx>=0.24
 trio>=0.22
 ignorant
 holehe
+ortools>=9.10
 

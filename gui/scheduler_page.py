@@ -100,12 +100,15 @@ def render_people_editor() -> bool:
         st.session_state["sched_new_person"] = ""
         del st.session_state["sched_clear_input"]
 
-    col_input, col_btn = st.columns([5, 1])
+    # Row label above both widgets for better vertical alignment
+    st.caption("Dodaj osobę")
+    col_input, col_btn = st.columns([6, 1])
     with col_input:
         new_name = st.text_input(
             "Dodaj osobę",
             key="sched_new_person",
             placeholder="imię",
+            label_visibility="collapsed",
         )
     with col_btn:
         if st.button("Dodaj", key="sched_add_person", help="Dodaj osobę"):
@@ -128,7 +131,7 @@ def render_scheduler_tab() -> None:
     st.header("Scheduler")
 
     today = date.today()
-    col_year, col_month = st.columns([2, 1])
+    col_year, col_month = st.columns([2, 2])
     with col_year:
         selected_year = st.number_input("Rok", value=int(today.year), min_value=2000, max_value=2100, step=1)
     with col_month:

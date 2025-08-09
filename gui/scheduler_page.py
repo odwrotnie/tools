@@ -6,6 +6,8 @@ from datetime import date
 
 import streamlit as st
 from lib.schedule import optimize_schedule
+import pandas as pd
+import altair as alt
 
 
 initial = {
@@ -163,6 +165,26 @@ def render_scheduler_tab() -> None:
             # Show results as a simple table day -> person
             rows = [{"dzień": d, "osoba": p} for d, p in sorted(assignments.items())]
             st.table(rows)
+
+            # Summary pie chart: who works how many days
+            counts: Dict[str, int] = {}
+            for person in assignments.values():
+                counts[person] = counts.get(person, 0) + 1
+            if counts:
+                df = pd.DataFrame(
+                    [{"osoba": person, "dni": days} for person, days in sorted(counts.items())]
+                )
+                chart = (
+                    alt.Chart(df)
+                    .mark_arc()
+                    .encode(
+                        theta=alt.Theta(field="dni", type="quantitative"),
+                        color=alt.Color(field="osoba", type="nominal"),
+                        tooltip=["osoba", "dni"],
+                    )
+                    .properties(width=300, height=300)
+                )
+                st.altair_chart(chart, use_container_width=False)
         except Exception as exc:
             st.error(f"Błąd optymalizacji: {exc}")
 

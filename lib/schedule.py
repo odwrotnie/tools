@@ -15,9 +15,11 @@ def optimize_schedule(
     Hard constraints:
       - exactly one person per day
       - if score == 0, that person cannot work that day
+      - optionally enforce near-equal load when feasible (each works ~równomiernie)
 
-    Objective:
-      - maximize total sum of assigned scores
+    Objective (lexicographically approximated in single linear objective):
+      - primary: maximize total sum of assigned scores
+      - secondary: maximize liczba osób, które mają co najmniej 1 dyżur (premia za zróżnicowanie)
 
     Returns:
       (assignments, total_score)
@@ -61,10 +63,44 @@ def optimize_schedule(
     for d in days:
         model.Add(sum(x[(p, d)] for p in persons) == 1)
 
-    # Objective: maximize total preference
-    model.Maximize(
-        sum(int(preferences[p].get(d, 0)) * x[(p, d)] for p in persons for d in days)
-    )
+    # Load per person
+    loads: Dict[str, object] = {}
+    for p in persons:
+        loads[p] = model.NewIntVar(0, len(days), f"load_{p}")
+        model.Add(loads[p] == sum(x[(p, d)] for d in days))
+
+    # Try to keep loads balanced if feasible
+    total_days = len(days)
+    num_people = len(persons)
+    if num_people > 0:
+        base = total_days // num_people
+        remainder = total_days % num_people  # not used directly; we allow base..base+1
+        workable: Dict[str, int] = {
+            p: sum(1 for d in days if int(preferences.get(p, {}).get(d, 0)) > 0)
+            for p in persons
+        }
+        if all(workable[p] >= base for p in persons):
+            for p in persons:
+                ub = min(base + 1, workable[p])
+                model.Add(loads[p] >= base)
+                model.Add(loads[p] <= ub)
+
+    # Diversity variables: y_p == 1 if person works at least one day
+    used_vars: Dict[str, object] = {}
+    for p in persons:
+        used_vars[p] = model.NewBoolVar(f"used_{p}")
+        # load >= used ensures used can be 1 only if load >= 1
+        model.Add(loads[p] >= used_vars[p])
+
+    # Objective: weighted sum (scores primary, diversity secondary)
+    score_weight = 10
+    diversity_weight = 1
+    objective_expr = []
+    for p in persons:
+        for d in days:
+            objective_expr.append(score_weight * int(preferences[p].get(d, 0)) * x[(p, d)])
+    objective_expr.append(diversity_weight * sum(used_vars.values()))
+    model.Maximize(sum(objective_expr))
 
     solver = cp_model_mod.CpSolver()
     solver.parameters.max_time_in_seconds = 10.0

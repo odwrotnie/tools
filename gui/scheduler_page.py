@@ -33,24 +33,46 @@ preferences = {
 }
 
 
-def _rows_for_days(days_map: Dict[str, int]) -> List[dict]:
-    rows: List[dict] = []
-    for day in sorted(days_map.keys()):
-        rows.append({"data": day, "wartość": days_map[day]})
-    return rows
+def _ensure_state_initialized() -> None:
+    if "scheduler_preferences" not in st.session_state:
+        st.session_state["scheduler_preferences"] = {
+            person: {day: int(val) for day, val in days.items()}
+            for person, days in preferences.items()
+        }
 
 
 def render_scheduler_tab() -> None:
     st.header("Scheduler")
 
-    if not preferences:
+    _ensure_state_initialized()
+    state_prefs: Dict[str, Dict[str, int]] = st.session_state["scheduler_preferences"]
+
+    if not state_prefs:
         st.info("Brak preferencji do wyświetlenia")
         return
 
-    for idx, (person, days) in enumerate(preferences.items()):
+    for idx, (person, days) in enumerate(state_prefs.items()):
         st.subheader(person)
-        rows = _rows_for_days(days)
-        st.table(rows)
-        if idx < len(preferences) - 1:
+
+        for day in sorted(days.keys()):
+            key = f"sched_{person}_{day}"
+            current_val = int(days[day])
+
+            col_label, col_slider = st.columns([1, 5])
+            with col_label:
+                st.write(day)
+            with col_slider:
+                new_val: int = st.slider(
+                    label=f"Wartość dla {person} {day}",
+                    min_value=0,
+                    max_value=10,
+                    value=current_val,
+                    step=1,
+                    key=key,
+                    label_visibility="collapsed",
+                )
+            days[day] = int(new_val)
+
+        if idx < len(state_prefs) - 1:
             st.divider()
 

@@ -4,7 +4,7 @@ from typing import List
 
 import streamlit as st
 
-from mail import check_email_sync
+from lib.email import check_email_sync
 from .shared import render_email_cards
 
 

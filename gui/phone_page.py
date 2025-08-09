@@ -4,7 +4,7 @@ from typing import List
 
 import streamlit as st
 
-from phone import check_phone_sync
+from lib.phone import check_phone_sync
 from .shared import render_results
 
 

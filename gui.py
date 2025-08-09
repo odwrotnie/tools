@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import json
 from typing import List, Optional
 
 import streamlit as st
@@ -33,7 +32,8 @@ def main() -> None:
                 st.error("Podaj kod kraju i numer telefonu")
             else:
                 try:
-                    results = check_phone_sync(cc.strip(), phone.strip(), None)
+                    with st.spinner("Sprawdzam telefon…"):
+                        results = check_phone_sync(cc.strip(), phone.strip(), None)
                     render_results("Wyniki (telefon)", results)
                 except Exception as exc:
                     st.error(f"Błąd: {exc}")
@@ -46,7 +46,8 @@ def main() -> None:
                 st.error("Podaj adres e-mail")
             else:
                 try:
-                    results = check_email_sync(email_val.strip(), None)
+                    with st.spinner("Sprawdzam e-mail…"):
+                        results = check_email_sync(email_val.strip(), None)
                     render_results("Wyniki (email)", results)
                 except Exception as exc:
                     st.error(f"Błąd: {exc}")

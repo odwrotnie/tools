@@ -25,13 +25,7 @@ import trio
 import httpx
 
 
-# Domyślna lista modułów do uruchomienia. Każda pozycja to (moduł, funkcja).
-# Zgodnie z README biblioteki, np. amazon: ignorant.modules.shopping.amazon:amazon
-DEFAULT_MODULES: Sequence[Tuple[str, str]] = (
-    ("shopping.amazon", "amazon"),
-    ("social_media.instagram", "instagram"),
-    ("social_media.snapchat", "snapchat"),
-)
+# Brak listy domyślnej: jeśli auto-odkrywanie się nie powiedzie, zgłaszamy błąd
 
 
 @dataclass
@@ -82,13 +76,21 @@ def parse_modules_arg(arg_value: Optional[str]) -> Sequence[Tuple[str, str]]:
     if not arg_value:
         # Domyślnie: skanuj wszystkie dostępne moduły ignorant
         discovered = _discover_all_ignorant_module_specs()
-        return discovered if discovered else DEFAULT_MODULES
+        if not discovered:
+            raise RuntimeError(
+                "Nie znaleziono żadnych modułów 'ignorant'. Upewnij się, że pakiet jest poprawnie zainstalowany."
+            )
+        return discovered
 
     # Specjalna wartość pozwalająca uruchomić WSZYSTKIE dostępne moduły
     normalized = arg_value.strip().lower().strip("'\"")
     if normalized in {"all", "*"}:
         discovered = _discover_all_ignorant_module_specs()
-        return discovered if discovered else DEFAULT_MODULES
+        if not discovered:
+            raise RuntimeError(
+                "Nie znaleziono żadnych modułów 'ignorant'. Upewnij się, że pakiet jest poprawnie zainstalowany."
+            )
+        return discovered
 
     result: List[Tuple[str, str]] = []
     for item in arg_value.split(","):
@@ -201,7 +203,7 @@ def build_arg_parser() -> argparse.ArgumentParser:
         help=(
             "Lista modułów oddzielona przecinkami. Każdy jako 'sciezka.do.modulu' lub 'sciezka.do.modulu:nazwa_funkcji'.\n"
             "Możesz też podać 'all' lub '*' aby przeszukać wszystkie dostępne moduły ignorant.\n"
-            "Domyślnie: shopping.amazon, social_media.instagram, social_media.snapchat"
+            "Domyślnie: przeszukaj wszystkie dostępne moduły ignorant"
         ),
     )
     parser.add_argument(

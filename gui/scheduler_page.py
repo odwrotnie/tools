@@ -11,34 +11,7 @@ import altair as alt
 import io
 
 
-initial = {
-        "2025-08-01": 1,
-        "2025-08-02": 1,
-        "2025-08-03": 1,
-        "2025-08-04": 1,
-        "2025-08-05": 1,
-        "2025-08-06": 1,
-        "2025-08-07": 1,
-        "2025-08-08": 1,
-        "2025-08-09": 1,
-        "2025-08-10": 1,
-        "2025-08-11": 1,
-        "2025-08-12": 1,
-        "2025-08-13": 1,
-        "2025-08-14": 1,
-        "2025-08-15": 1,
-        "2025-08-16": 1,
-        "2025-08-17": 1,
-    }
-
-preferences = {
-    "pawel": initial.copy(),
-    "michal": initial.copy(),
-    "kasia": initial.copy(),
-    "aga": initial.copy(),
-}
-
-DEFAULT_PEOPLE: List[str] = ["pawel", "michal", "kasia", "aga"]
+DEFAULT_PEOPLE: List[str] = []
 
 
 def _generate_days_for_month(year: int, month: int) -> List[str]:
@@ -48,7 +21,7 @@ def _generate_days_for_month(year: int, month: int) -> List[str]:
 
 def _ensure_people_initialized() -> None:
     if "scheduler_people" not in st.session_state:
-        st.session_state["scheduler_people"] = list(preferences.keys()) or DEFAULT_PEOPLE
+        st.session_state["scheduler_people"] = []
 
 
 def _ensure_state_for_month(
@@ -113,6 +86,44 @@ def _weekday_for_str(day_str: str) -> str:
         return ""
 
 
+def render_people_editor() -> bool:
+    """Renders a minimal people editor: input + Add button, list with delete buttons.
+
+    Returns True if the list of people changed in this run.
+    """
+    _ensure_people_initialized()
+    people: List[str] = list(st.session_state.get("scheduler_people", DEFAULT_PEOPLE))
+    changed = False
+
+    # Clear input if requested before rendering the widget
+    if st.session_state.get("sched_clear_input"):
+        st.session_state["sched_new_person"] = ""
+        del st.session_state["sched_clear_input"]
+
+    col_input, col_btn = st.columns([5, 1])
+    with col_input:
+        new_name = st.text_input(
+            "Dodaj osobę",
+            key="sched_new_person",
+            placeholder="imię",
+        )
+    with col_btn:
+        if st.button("Dodaj", key="sched_add_person", help="Dodaj osobę"):
+            name = (new_name or "").strip()
+            if not name:
+                st.warning("Podaj nazwę osoby")
+            elif name in people:
+                st.info("Taka osoba już istnieje")
+            else:
+                people.append(name)
+                st.session_state["scheduler_people"] = people
+                st.session_state["sched_clear_input"] = True
+                changed = True
+                st.rerun()
+
+    return changed
+
+
 def render_scheduler_tab() -> None:
     st.header("Scheduler")
 
@@ -123,30 +134,8 @@ def render_scheduler_tab() -> None:
     with col_month:
         selected_month = st.selectbox("Miesiąc", options=list(range(1, 13)), index=int(today.month) - 1, format_func=lambda m: f"{m:02d}")
 
-    # People editor
-    _ensure_people_initialized()
-    current_people: List[str] = st.session_state.get("scheduler_people", DEFAULT_PEOPLE)
-    people_text_default = "\n".join(current_people)
-    people_text = st.text_area("Osoby (po jednej na linię)", value=people_text_default, height=100, key="scheduler_people_text")
-    force_rebuild = False
-    if st.button("Zapisz osoby"):
-        new_people: List[str] = []
-        seen = set()
-        for line in people_text.splitlines():
-            name = line.strip()
-            if not name:
-                continue
-            if name in seen:
-                continue
-            seen.add(name)
-            new_people.append(name)
-        if not new_people:
-            st.error("Lista osób nie może być pusta")
-        else:
-            st.session_state["scheduler_people"] = new_people
-            force_rebuild = True
-
-    _ensure_state_for_month(int(selected_year), int(selected_month), force_rebuild=force_rebuild)
+    # Build state for current month (syncs people/preferences)
+    _ensure_state_for_month(int(selected_year), int(selected_month), force_rebuild=False)
     state_prefs: Dict[str, Dict[str, int]] = st.session_state["scheduler_preferences"]
 
     st.subheader("Preferencje")
@@ -160,11 +149,17 @@ def render_scheduler_tab() -> None:
 
     if not state_prefs:
         st.info("Brak preferencji do wyświetlenia")
-        return
 
-    if view_mode == "Lista":
+    if state_prefs and view_mode == "Lista":
         for idx, (person, days) in enumerate(state_prefs.items()):
-            st.subheader(person)
+            col_name, col_del = st.columns([6, 1])
+            with col_name:
+                st.subheader(person)
+            with col_del:
+                if st.button("Usuń", key=f"sched_del_{person}", help="Usuń osobę"):
+                    people = list(st.session_state.get("scheduler_people", []))
+                    st.session_state["scheduler_people"] = [p for p in people if p != person]
+                    st.rerun()
 
             for day in sorted(days.keys()):
                 key = f"sched_{person}_{day}"
@@ -187,7 +182,7 @@ def render_scheduler_tab() -> None:
 
             if idx < len(state_prefs) - 1:
                 st.divider()
-    else:
+    elif state_prefs and view_mode == "Kalendarz":
         # Calendar view of sliders — separate calendar per person
         year = int(selected_year)
         month = int(selected_month)
@@ -197,7 +192,14 @@ def render_scheduler_tab() -> None:
         total_rows = (total_cells + 6) // 7
 
         for idx, (person, days) in enumerate(state_prefs.items()):
-            st.subheader(person)
+            col_name, col_del = st.columns([6, 1])
+            with col_name:
+                st.subheader(person)
+            with col_del:
+                if st.button("Usuń", key=f"sched_del_cal_{person}", help="Usuń osobę"):
+                    people = list(st.session_state.get("scheduler_people", []))
+                    st.session_state["scheduler_people"] = [p for p in people if p != person]
+                    st.rerun()
 
             # Header row with weekday names
             cols = st.columns(7)
@@ -234,6 +236,9 @@ def render_scheduler_tab() -> None:
                 st.divider()
 
     st.markdown("")
+    st.divider()
+    # People editor (input + add button) shown after calendars
+    render_people_editor()
     if st.button("Optymalizuj harmonogram", type="primary"):
         try:
             with st.spinner("Optymalizuję z użyciem OR-Tools…"):

@@ -8,9 +8,9 @@ from gui.scheduler_page import render_scheduler_tab
 
 
 def main() -> None:
-    st.set_page_config(page_title="OSINT: phone/email", page_icon="🔎", layout="centered")
-    st.title("OSINT checker: phone / email")
-    st.caption("Wykorzystuje biblioteki ignorant i holehe")
+    st.set_page_config(page_title="Rzeczy", page_icon="💩", layout="wide")
+    st.title("Rzeczy")
+    st.caption("Różne")
 
     tabs = st.tabs(["Telefon", "Email", "Scheduler"])
 

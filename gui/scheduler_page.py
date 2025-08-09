@@ -142,50 +142,10 @@ def render_scheduler_tab() -> None:
     state_prefs: Dict[str, Dict[str, int]] = st.session_state["scheduler_preferences"]
 
     st.subheader("Preferencje")
-    view_mode = st.radio(
-        "Widok preferencji",
-        options=["Kalendarz", "Lista"],
-        horizontal=True,
-        index=0,
-        key="scheduler_view_mode",
-    )
 
     if not state_prefs:
         st.info("Brak preferencji do wyświetlenia")
-
-    if state_prefs and view_mode == "Lista":
-        for idx, (person, days) in enumerate(state_prefs.items()):
-            col_name, col_del = st.columns([6, 1])
-            with col_name:
-                st.subheader(person)
-            with col_del:
-                if st.button("Usuń", key=f"sched_del_{person}", help="Usuń osobę"):
-                    people = list(st.session_state.get("scheduler_people", []))
-                    st.session_state["scheduler_people"] = [p for p in people if p != person]
-                    st.rerun()
-
-            for day in sorted(days.keys()):
-                key = f"sched_{person}_{day}"
-                current_val = int(days[day])
-
-                col_label, col_slider = st.columns([1, 5])
-                with col_label:
-                    st.write(f"{day} ({_weekday_for_str(day)})")
-                with col_slider:
-                    new_val: int = st.slider(
-                        label=f"Wartość dla {person} {day}",
-                        min_value=0,
-                        max_value=10,
-                        value=current_val,
-                        step=1,
-                        key=key,
-                        label_visibility="collapsed",
-                    )
-                days[day] = int(new_val)
-
-            if idx < len(state_prefs) - 1:
-                st.divider()
-    elif state_prefs and view_mode == "Kalendarz":
+    elif state_prefs:
         # Calendar view of sliders — separate calendar per person
         year = int(selected_year)
         month = int(selected_month)

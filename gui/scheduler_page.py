@@ -91,6 +91,27 @@ def _ensure_state_for_month(
         st.session_state["scheduler_preferences"] = current
 
 
+def _weekday_pl_name(d: date) -> str:
+    names = [
+        "poniedziałek",
+        "wtorek",
+        "środa",
+        "czwartek",
+        "piątek",
+        "sobota",
+        "niedziela",
+    ]
+    return names[d.weekday()]
+
+
+def _weekday_for_str(day_str: str) -> str:
+    try:
+        d = date.fromisoformat(day_str)
+        return _weekday_pl_name(d)
+    except Exception:
+        return ""
+
+
 def render_scheduler_tab() -> None:
     st.header("Scheduler")
 
@@ -127,34 +148,89 @@ def render_scheduler_tab() -> None:
     _ensure_state_for_month(int(selected_year), int(selected_month), force_rebuild=force_rebuild)
     state_prefs: Dict[str, Dict[str, int]] = st.session_state["scheduler_preferences"]
 
+    st.subheader("Preferencje")
+    view_mode = st.radio(
+        "Widok preferencji",
+        options=["Kalendarz", "Lista"],
+        horizontal=True,
+        index=0,
+        key="scheduler_view_mode",
+    )
+
     if not state_prefs:
         st.info("Brak preferencji do wyświetlenia")
         return
 
-    for idx, (person, days) in enumerate(state_prefs.items()):
-        st.subheader(person)
+    if view_mode == "Lista":
+        for idx, (person, days) in enumerate(state_prefs.items()):
+            st.subheader(person)
 
-        for day in sorted(days.keys()):
-            key = f"sched_{person}_{day}"
-            current_val = int(days[day])
+            for day in sorted(days.keys()):
+                key = f"sched_{person}_{day}"
+                current_val = int(days[day])
 
-            col_label, col_slider = st.columns([1, 5])
-            with col_label:
-                st.write(day)
-            with col_slider:
-                new_val: int = st.slider(
-                    label=f"Wartość dla {person} {day}",
-                    min_value=0,
-                    max_value=10,
-                    value=current_val,
-                    step=1,
-                    key=key,
-                    label_visibility="collapsed",
-                )
-            days[day] = int(new_val)
+                col_label, col_slider = st.columns([1, 5])
+                with col_label:
+                    st.write(f"{day} ({_weekday_for_str(day)})")
+                with col_slider:
+                    new_val: int = st.slider(
+                        label=f"Wartość dla {person} {day}",
+                        min_value=0,
+                        max_value=10,
+                        value=current_val,
+                        step=1,
+                        key=key,
+                        label_visibility="collapsed",
+                    )
+                days[day] = int(new_val)
 
-        if idx < len(state_prefs) - 1:
-            st.divider()
+            if idx < len(state_prefs) - 1:
+                st.divider()
+    else:
+        # Calendar view of sliders — separate calendar per person
+        year = int(selected_year)
+        month = int(selected_month)
+        num_days = calendar.monthrange(year, month)[1]
+        first_weekday = calendar.monthrange(year, month)[0]  # Mon=0..Sun=6
+        total_cells = first_weekday + num_days
+        total_rows = (total_cells + 6) // 7
+
+        for idx, (person, days) in enumerate(state_prefs.items()):
+            st.subheader(person)
+
+            # Header row with weekday names
+            cols = st.columns(7)
+            for i, col in enumerate(cols):
+                with col:
+                    col.markdown(f"**{['Pn','Wt','Śr','Cz','Pt','So','Nd'][i]}**")
+
+            # Rows of calendar
+            for row in range(total_rows):
+                cols = st.columns(7)
+                for i in range(7):
+                    day_index = row * 7 + i
+                    day_num = day_index - first_weekday + 1
+                    with cols[i]:
+                        if 1 <= day_num <= num_days:
+                            d_str = f"{year:04d}-{month:02d}-{day_num:02d}"
+                            st.markdown(f"**{day_num:02d}**")
+                            key = f"sched_{person}_{d_str}"
+                            current_val = int(days.get(d_str, 0))
+                            new_val: int = st.slider(
+                                label=f"{person} {d_str}",
+                                min_value=0,
+                                max_value=10,
+                                value=current_val,
+                                step=1,
+                                key=key,
+                                label_visibility="collapsed",
+                            )
+                            days[d_str] = int(new_val)
+                        else:
+                            st.empty()
+
+            if idx < len(state_prefs) - 1:
+                st.divider()
 
     st.markdown("")
     if st.button("Optymalizuj harmonogram", type="primary"):
@@ -179,12 +255,75 @@ def render_scheduler_tab() -> None:
                     .mark_arc()
                     .encode(
                         theta=alt.Theta(field="dni", type="quantitative"),
-                        color=alt.Color(field="osoba", type="nominal"),
+                        color=alt.Color(field="osoba", type="nominal", legend=None),
                         tooltip=["osoba", "dni"],
                     )
-                    .properties(width=300, height=300)
+                    .properties(width=320, height=320)
                 )
-                st.altair_chart(chart, use_container_width=False)
+                _spacer_left, _center, _right = st.columns([1, 2, 1])
+                with _center:
+                    st.altair_chart(chart, use_container_width=False)
+                with _right:
+                    st.markdown("**Dni pracy**")
+                    df_sorted = df.sort_values(by=["dni", "osoba"], ascending=[False, True])
+                    st.table(df_sorted)
+
+            # Calendar visualization for the selected month
+            try:
+                year = int(selected_year)
+                month = int(selected_month)
+                num_days = calendar.monthrange(year, month)[1]
+                first_weekday = calendar.monthrange(year, month)[0]  # Mon=0..Sun=6
+
+                cal_rows = []
+                for day_num in range(1, num_days + 1):
+                    d_str = f"{year:04d}-{month:02d}-{day_num:02d}"
+                    assigned = assignments.get(d_str)
+                    dow = (first_weekday + (day_num - 1)) % 7
+                    week_idx = (first_weekday + (day_num - 1)) // 7
+                    cal_rows.append(
+                        {
+                            "day": d_str,
+                            "day_num": day_num,
+                            "weekday": dow,  # 0..6, Pon..Nd
+                            "week": week_idx,
+                            "osoba": assigned or "—",
+                        }
+                    )
+
+                df_cal = pd.DataFrame(cal_rows)
+                # Base calendar grid
+                base = (
+                    alt.Chart(df_cal)
+                    .mark_rect(stroke="lightgray")
+                    .encode(
+                        x=alt.X("weekday:O", title=None, axis=alt.Axis(labels=True, values=[0,1,2,3,4,5,6], labelExpr='{"0":"Pn","1":"Wt","2":"Śr","3":"Cz","4":"Pt","5":"So","6":"Nd"}[datum]')),
+                        y=alt.Y("week:O", title=None, sort="ascending"),
+                        color=alt.Color("osoba:N", title="Osoba"),
+                        tooltip=["day", "osoba"],
+                    )
+                )
+
+                # Overlay day number + person initials
+                initials = (
+                    df_cal.assign(init=df_cal["osoba"].map(lambda s: s[0].upper() if isinstance(s, str) and s not in {"", "—"} else ""))
+                )
+                text = (
+                    alt.Chart(initials)
+                    .mark_text(baseline="middle", fontSize=11)
+                    .encode(
+                        x="weekday:O",
+                        y="week:O",
+                        text=alt.Text("label:N"),
+                    )
+                    .transform_calculate(
+                        label='join([toString(datum.day_num), datum.init ? ": " + datum.init : ""])'
+                    )
+                )
+
+                st.altair_chart(base + text, use_container_width=True)
+            except Exception as cal_exc:
+                st.warning(f"Nie udało się narysować kalendarza: {cal_exc}")
         except Exception as exc:
             st.error(f"Błąd optymalizacji: {exc}")
 

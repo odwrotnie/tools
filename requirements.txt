@@ -1,0 +1,6 @@
+streamlit>=1.30
+httpx>=0.24
+trio>=0.22
+ignorant
+holehe
+
